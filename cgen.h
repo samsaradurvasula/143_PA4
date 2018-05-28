@@ -23,7 +23,8 @@ private:
    int stringclasstag;
    int intclasstag;
    int boolclasstag;
-   int curr_class_tag; 
+   int curr_class_tag;
+   SymbolTable<Symbol, method_class> *method_table;  
 
 
 // The following methods emit code for
@@ -50,7 +51,8 @@ private:
    void install_classes(Classes cs);
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
-   void set_all_attribs(CgenNodeP nd); 
+   void set_all_attribs(CgenNodeP nd);
+   void set_meth_init(CgenNodeP nd);  
    void set_all_meth(CgenNodeP nd); 
    std::vector<CgenNodeP> get_inheritance_path(CgenNodeP nd);  
    
