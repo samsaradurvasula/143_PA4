@@ -39,7 +39,7 @@ private:
    void code_class_objtab(); 
   // void code_dispatch_tables(); 
    void code_prototypes();  
-
+   void code_disptab(); 
 // The following creates an inheritance graph from
 // a list of classes.  The graph is implemented as
 // a tree of `CgenNode', and class names are placed

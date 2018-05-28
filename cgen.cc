@@ -25,7 +25,7 @@
 //set tags, code_nameTab, code_objTab, get_all_attributes, get_all_methods, nd_vector to hold the nodes separately from a list 
 #include "cgen.h"
 #include "cgen_gc.h"
-
+//Attributes and methods are not being differentiated! 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug; 
 //
@@ -645,7 +645,27 @@ void CgenClassTable:: code_class_objtab()
 		str<<endl; 
 	   } 
 	str<<endl; 	
-} 
+}
+
+void CgenClassTable:: code_disptab() 
+{ 
+ 	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
+	   { 
+		CgenNodeP currNode = nd_vector[i];
+		set_all_meth(currNode); 
+		std::vector<method_class*> node_methods = currNode -> get_methods(); 
+		str<<currNode -> get_name()<<DISPTAB_SUFFIX<<endl; 
+			for (std::size_t j = 0, max = node_methods.size(); j != max; ++i)
+	        	   {
+				str<<WORD<<(node_methods[j]) -> get_name()<<endl; 
+				 StringEntry * string_entry = stringtable.lookup_string(currNode->get_name() -> get_string());
+                		string_entry -> code_ref(str);
+			   } 
+	   } 
+		str<<endl; 
+
+
+}  
 
 void CgenClassTable:: code_prototypes() 
 { 
@@ -859,7 +879,7 @@ std::vector<CgenNodeP> CgenClassTable:: get_inheritance_path(CgenNodeP nd)
 { 	CgenNodeP currNode = nd; 
 	std::vector<CgenNodeP> inherited_nodes; 
 	CgenNodeP parentnd = nd->get_parentnd(); 
-	while (parentnd != NULL)  
+	while (currNode->get_name()  != Object)  
 	     {  inherited_nodes.push_back(parentnd); 
 		currNode = parentnd; 
 		parentnd = currNode -> get_parentnd(); 
@@ -988,7 +1008,10 @@ void CgenClassTable::code()
   code_class_nametab(); 
 
   if(cgen_debug) cout<<"coding object table"<<endl; 
-  code_class_objtab(); 
+  code_class_objtab();
+
+  if(cgen_debug) cout<<"coding disptatch tables"<<endl; 
+  code_disptab();  
 
   if(cgen_debug) cout<<"coding prototypes"<<endl; 
    code_prototypes();  
