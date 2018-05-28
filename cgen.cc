@@ -646,14 +646,24 @@ void CgenClassTable:: code_class_objtab()
 	   } 
 	str<<endl; 	
 } 
+
 void CgenClassTable:: code_prototypes() 
 { 
 	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
+           {    CgenNodeP currNode = nd_vector[i]; 
+		set_all_attribs(currNode); 	
 		str<<WORD<<-1<<endl; //Garbage collection tag 
-		CgenNodeP currNode = nd_vector[i]; 
+//		CgenNodeP currNode = nd_vector[i]; 
 		Symbol node_name = currNode -> get_name(); 
-		
+		str<<node_name<<PROTOBJ_SUFFIX<<LABEL<<endl; 
+		str<<WORD<<currNode -> get_tag_val()<<endl;
+		std::vector<attr_class*> node_attribs = currNode -> get_attribs();  
+		str<<WORD<<node_attribs.size() + DEFAULT_OBJFIELDS<<endl;
+		str<<WORD<<node_name<<DISPTAB_SUFFIX<<endl; 
+		StringEntry * string_entry = stringtable.lookup_string(node_name -> get_string());   
+		string_entry -> code_ref(str); 	
 
+	   } 
 
 
 } 
@@ -839,6 +849,8 @@ void CgenClassTable::install_class(CgenNodeP nd)
     } 
 
   nd -> set_tag_val(tag); 
+  //set_all_attribs(nd); 
+  //set_all_meth(nd); 
   nd_vector.push_back(nd); 
 
 }
@@ -847,9 +859,8 @@ std::vector<CgenNodeP> CgenClassTable:: get_inheritance_path(CgenNodeP nd)
 { 	CgenNodeP currNode = nd; 
 	std::vector<CgenNodeP> inherited_nodes; 
 	CgenNodeP parentnd = nd->get_parentnd(); 
-	while (parentnd != NULL) 
-	     { 
-		inherited_nodes.push_back(parentnd); 
+	while (parentnd != NULL)  
+	     {  inherited_nodes.push_back(parentnd); 
 		currNode = parentnd; 
 		parentnd = currNode -> get_parentnd(); 
 	     } 
@@ -862,8 +873,8 @@ void CgenClassTable::set_all_attribs(CgenNodeP nd)
 
 //First add the node's attributes,then get the inhertiance path and add all ancestor attribs 
 	Features features = nd -> get_features(); 
-	for (int i = features -> first(); features -> more(i); features -> next(i)) 
-	   { 
+	for (int i = features -> first(); features -> more(i); i = features -> next(i)) 
+	   {
 		Feature f = features -> nth(i);
 		attr_class *attr   = dynamic_cast <attr_class *> (f);  
 			nd->set_attrib(attr); 
@@ -873,16 +884,16 @@ void CgenClassTable::set_all_attribs(CgenNodeP nd)
 
 	std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
 	 for (std::size_t i = 0, max = ancestor_nodes.size(); i != max; ++i) 
-	    { 
+	    {  
 		CgenNodeP curr_ancestor = ancestor_nodes[i]; 
 		  Features ancestor_features = curr_ancestor -> get_features();
-        	  for (int i = ancestor_features -> first(); ancestor_features -> more(i); ancestor_features -> next(i))
+        	  for (int j = ancestor_features -> first(); ancestor_features -> more(j); j = ancestor_features -> next(j))
            	     {	
-                	Feature f = ancestor_features -> nth(i);
+                	Feature f = ancestor_features -> nth(j);
                 	attr_class *attr   = dynamic_cast <attr_class *> (f);
                         nd->set_attrib(attr);
            	     }	
-	    }    
+	    } 
 
 } 
 
@@ -890,8 +901,8 @@ void CgenClassTable::set_all_attribs(CgenNodeP nd)
 void CgenClassTable::set_all_meth(CgenNodeP nd) 
 { 	bool overwrite_method = false; 
 	Features features = nd -> get_features();
-        for (int i = features -> first(); features -> more(i); features -> next(i))
-           {
+        for (int i = features -> first(); features -> more(i);i =  features -> next(i))
+           {   
                 Feature f = features -> nth(i);
                 method_class *method   = dynamic_cast <method_class *> (f);
                         nd->set_method(method);
@@ -899,17 +910,17 @@ void CgenClassTable::set_all_meth(CgenNodeP nd)
 
 	 std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
          for (std::size_t i = 0, max = ancestor_nodes.size(); i != max; ++i)
-            {
+            {  
                 CgenNodeP curr_ancestor = ancestor_nodes[i];
                   Features ancestor_features = curr_ancestor -> get_features();
-                  for (int i = ancestor_features -> first(); ancestor_features -> more(i); ancestor_features -> next(i))
-                     {
-                        Feature f = ancestor_features -> nth(i);
+                  for (int j = ancestor_features -> first(); ancestor_features -> more(j); j= ancestor_features -> next(i))
+                     {  
+                        Feature f = ancestor_features -> nth(j);
                         method_class *method   = dynamic_cast <method_class *> (f);
-			  for (std::size_t i = 0, max = nd->get_methods().size(); i != max; ++i) 
-			     { 
-		  	     
-                                if ((nd->get_methods())[i] == method) { 
+			  for (std::size_t k = 0, max = nd->get_methods().size(); k != max; ++k) 
+			     {    
+		  	      
+                                if ((nd->get_methods())[k] == method) { 
 					overwrite_method = true; 	 
 				} 
 			     }    
@@ -918,6 +929,7 @@ void CgenClassTable::set_all_meth(CgenNodeP nd)
             }
 
 } 
+
 
 void CgenClassTable::install_classes(Classes cs)
 {
@@ -979,7 +991,7 @@ void CgenClassTable::code()
   code_class_objtab(); 
 
   if(cgen_debug) cout<<"coding prototypes"<<endl; 
-  code_prototypes();  
+   code_prototypes();  
 
 //                 Add your code to emit
 //                   - prototype objects
