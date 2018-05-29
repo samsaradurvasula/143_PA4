@@ -21,10 +21,11 @@
 // fill in the rest.
 //
 //**************************************************************
-
+//Figure out how to delete method table at the end of program execution 
 //set tags, code_nameTab, code_objTab, get_all_attributes, get_all_methods, nd_vector to hold the nodes separately from a list 
 #include "cgen.h"
 #include "cgen_gc.h"
+#include <string> 
 //Attributes and methods are not being differentiated! 
 extern void emit_string_constant(ostream& str, char *s);
 extern int cgen_debug; 
@@ -648,7 +649,7 @@ void CgenClassTable:: code_class_objtab()
 }
 
 void CgenClassTable:: code_disptab() 
-{ 
+{ 	set_meth_init(); 
  	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
 	   { 
 		CgenNodeP currNode = nd_vector[i];
@@ -668,7 +669,9 @@ void CgenClassTable:: code_disptab()
 }  
 
 void CgenClassTable:: code_prototypes() 
-{ 
+	
+{	//attr_offset_table = new SymbolTable <Symbol, char> ();
+//	attr_offset_table = new SymbolTable <Symbol, int> ();   
 	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
            {    CgenNodeP currNode = nd_vector[i]; 
 		set_all_attribs(currNode); 	
@@ -686,7 +689,18 @@ void CgenClassTable:: code_prototypes()
 	   } 
 
 
-} 
+}
+
+void CgenClassTable:: code_obj_init() 
+{ /*for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
+     {  CgenNodeP currNode = nd_vector[i]; 
+	str<<currNode -> get_name()<<CLASSINIT_SUFFIX<<endl;  	
+	emitaddiu(SP,SP, -12, str); 
+	//We need to keep track of the parent attributes, but ONLY want to print our attributes and then jump to parent class with the jal instruction 
+
+
+	*/ 
+}  
 
 
 
@@ -869,8 +883,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
     } 
 
   nd -> set_tag_val(tag); 
-  //set_all_attribs(nd); 
-  set_meth_init(nd); 
+  //set_all_attribs(nd);  
   nd_vector.push_back(nd); 
 
 }
@@ -889,56 +902,87 @@ std::vector<CgenNodeP> CgenClassTable:: get_inheritance_path(CgenNodeP nd)
 } 
 
 void CgenClassTable::set_all_attribs(CgenNodeP nd) 
-{ 
-
-//First add the node's attributes,then get the inhertiance path and add all ancestor attribs 
-	Features features = nd -> get_features(); 
-	for (int i = features -> first(); features -> more(i); i = features -> next(i)) 
-	   {
-		Feature f = features -> nth(i);
-		attr_class *attr   = dynamic_cast <attr_class *> (f);  
-			if (attr!=NULL) nd->set_attrib(attr); 
-	   } 
-
-//Now get ancestors 
-
-	std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
+{	int curr_offset;
+	 nd->attr_offset_table = new SymbolTable<Symbol, int> (); 
+	nd->attr_offset_table->enterscope(); 
+	 std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
 	 for (std::size_t i = 0, max = ancestor_nodes.size(); i != max; ++i) 
-	    {  
+	    {   //nd->attr_offset_table = new SymbolTable<Symbol, int> (); 
+		//nd->attr_offset_table->enterscope();  
 		CgenNodeP curr_ancestor = ancestor_nodes[i]; 
 		  Features ancestor_features = curr_ancestor -> get_features();
         	  for (int j = ancestor_features -> first(); ancestor_features -> more(j); j = ancestor_features -> next(j))
-           	     {	
+           	     {	curr_offset++; 
                 	Feature f = ancestor_features -> nth(j);
                 	attr_class *attr   = dynamic_cast <attr_class *> (f);
-                        if(attr != NULL) nd->set_attrib(attr);
-           	     }	
+                        if(attr != NULL) { 
+				nd->set_attrib(attr);
+			/* 	int offset_val = (12 + (curr_offset *4)); 
+				char * offset; 
+				sprintf(offset, "%d",offset_val);   
+				offset = strcat(offset, "($fp)"); 
+				attr_offset_table -> addid(attr -> get_name(), offset); */  
+			  
+				nd->attr_offset_table -> addid(attr->get_name(), &curr_offset); 
+ 
+			  } 
+           	     }
+		  //nd->attr_offset_table->exitscope(); 	
 	    } 
 
+
+//First add the node's attributes,then get the inhertiance path and add all ancestor attribs 
+	Features features = nd -> get_features(); 
+	//nd -> attr_offset_table->enterscope(); 
+	for (int i = features -> first(); features -> more(i); i = features -> next(i)) 
+	   {	curr_offset++; 
+
+		Feature f = features -> nth(i);
+		attr_class *attr   = dynamic_cast <attr_class *> (f);  
+			if (attr!=NULL) { 
+				 nd->set_attrib(attr); 
+				 /* int offset_val =(12 + (curr_offset * 4)); 
+				 char * offset; 
+				 sprintf(offset, "%d", offset_val); 
+				 offset = strcat(offset, "($fp)"); 
+				 attr_offset_table -> addid(attr -> get_name(), offset);  */
+				 nd->attr_offset_table -> addid(attr -> get_name(), &curr_offset);  
+			  } 
+	   } 
+	nd -> attr_offset_table -> exitscope(); 
 } 
 
 
-void CgenClassTable::set_meth_init(CgenNodeP nd) 
-{ 	bool overwrite_method = false; 
-	method_table.enterscope(); 
-	Features features = nd -> get_features();
-        for (int i = features -> first(); features -> more(i);i =  features -> next(i))
-           {   
-                Feature f = features -> nth(i);
-                method_class *method   = dynamic_cast <method_class *> (f);
-		if (method != NULL) 
-		{ 
-                        nd->set_method(method);
-		}
+void CgenClassTable::set_meth_init() 
+{ 	
+	method_table = new SymbolTable <Symbol, method_class> (); 
+	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
+	   { 
+		method_table->enterscope();
+		CgenNodeP currNode = nd_vector[i];  
+		Features features = currNode -> get_features();
+        	for (int i = features -> first(); features -> more(i);i =  features -> next(i))
+           	   {   
+                	Feature f = features -> nth(i);
+                	method_class *method   = dynamic_cast <method_class *> (f);
+			if (method != NULL) 
+			  { 
+                        	currNode->set_method(method);
+				currNode -> set_self_method(method); 
 		
-		if ((method_table->lookup(method -> get_name())) == NULL)
-		{ 
-			method_table->addid(method -> get_name(), method);   
-           	}
-} 
+				if ((method_table->lookup(method -> get_name())) == NULL)
+			  	   {  
+					method_table->addid(method -> get_name(), method);   
+           		  	   }	 	
+	    	    	  }
+		    } 
+		 method_table->exitscope(); 
+	    } 
+}     
 
-void::CgenClassTable::set_all_meth(CgenNodeP nd) 
-{ 	 std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
+void CgenClassTable::set_all_meth(CgenNodeP nd) 
+{ 	bool overwrite_method = false;  
+	std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
          for (std::size_t i = 0, max = ancestor_nodes.size(); i != max; ++i)
             {  
                 CgenNodeP curr_ancestor = ancestor_nodes[i];
@@ -1027,20 +1071,15 @@ void CgenClassTable::code()
   if(cgen_debug) cout<<"coding prototypes"<<endl; 
    code_prototypes();  
 
-//                 Add your code to emit
-//                   - prototype objects
-//                   - class_nameTab
-//                   - dispatch tables
-//
 
   if (cgen_debug) cout << "coding global text" << endl;
   code_global_text();
 
-//                 Add your code to emit
-//                   - object initializer
-//                   - the class methods
-//                   - etc...
+  if (cgen_debug) cout<< "coding object initializer"<<endl; 
+  code_obj_init(); 
 
+  if (cgen_debug) cout << "coding methods"<<endl; 
+//  code_methods(); 
 }
 
 
@@ -1078,8 +1117,46 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //
 //*****************************************************************
 
+/* void CgenClassTable::code_methods() 
+{ //Entry point into the AST to generate code recursively 
+	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i) 
+	   { 
+		CgenNodeP currNode = nd_vector[i];  
+		if (currNode -> basic() == 0) //Not an int, string, object, bool 
+		  {  
+			std::vector<method_class*> node_methods = currNode -> get_self_methods(); //Uninherited methods 
+			for (std::size_t j = 0, max = node_methods.size(); j != max; ++i)	 
+			   { 
+				method_class* currMethod = node_methods[i]; 
+				currMethod -> code(); 
+			   	//TODO: figure out how to be able generate code for this method wtf 
+			   }
+	   	
+		  } 
+	    }
+} */ 
+
+//We can make up location of attribute, does not need to be emitted upon initialization, simply needs to be accessible  
+
+
+/* void method_class::code(ostream &s) { 
+
+
+
+}  */ 
+
 void assign_class::code(ostream &s) {
-}
+/*	this->expr -> code(s); 
+	int  new_offset = currNode -> attr_offset_table.lookup(this -> name); 
+	//load address then store word 
+	
+	char * offset; 
+        sprintf(offset, "%d", new_offset); 
+        offset = strcat(offset, "($fp)"); 	
+	emit_load_address(ACC, offset, s); 
+	emit_store(SELF, new_offset, ACC, s); */   
+	
+} 
 
 void static_dispatch_class::code(ostream &s) {
 }
@@ -1096,13 +1173,21 @@ void loop_class::code(ostream &s) {
 void typcase_class::code(ostream &s) {
 }
 
-void block_class::code(ostream &s) {
-}
+void block_class::code(ostream &s) { 
+	for (int i = body -> first (); body -> more (i); i = body -> next (i))
+           { 
+			body->nth(i) -> code(s);
+	   }   
+}	 
 
 void let_class::code(ostream &s) {
 }
 
 void plus_class::code(ostream &s) {
+//Need to recursively check the two expressions, but both will evaluate to int per the semantic checker. Then call add on them, store the value in V1 and push the result to a new location on the stack 
+
+
+	
 }
 
 void sub_class::code(ostream &s) {
@@ -1151,10 +1236,10 @@ void new__class::code(ostream &s) {
 }
 
 void isvoid_class::code(ostream &s) {
- //Nothing to do here! 
 }
 
 void no_expr_class::code(ostream &s) {
+//That's all, folks! 
 }
 
 void object_class::code(ostream &s) {

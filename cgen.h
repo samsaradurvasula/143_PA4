@@ -3,7 +3,8 @@
 #include "emit.h"
 #include "cool-tree.h"
 #include "symtab.h"
-#include <vector> 
+#include <vector>
+#include <string>  
 enum Basicness     {Basic, NotBasic};
 #define TRUE 1
 #define FALSE 0
@@ -25,7 +26,7 @@ private:
    int boolclasstag;
    int curr_class_tag;
    SymbolTable<Symbol, method_class> *method_table;  
-
+   SymbolTable<Symbol, int> *attr_offset_table;
 
 // The following methods emit code for
 // constants and global declarations.
@@ -35,12 +36,13 @@ private:
    void code_bools(int);
    void code_select_gc();
    void code_constants();
-//   void code_obj_init(); 
+   void code_obj_init(); 
    void code_class_nametab(); 
    void code_class_objtab(); 
   // void code_dispatch_tables(); 
    void code_prototypes();  
-   void code_disptab(); 
+   void code_disptab();
+   void code_methods(); 
 // The following creates an inheritance graph from
 // a list of classes.  The graph is implemented as
 // a tree of `CgenNode', and class names are placed
@@ -52,7 +54,7 @@ private:
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
    void set_all_attribs(CgenNodeP nd);
-   void set_meth_init(CgenNodeP nd);  
+   void set_meth_init();  
    void set_all_meth(CgenNodeP nd); 
    std::vector<CgenNodeP> get_inheritance_path(CgenNodeP nd);  
    
@@ -60,6 +62,9 @@ public:
    CgenClassTable(Classes, ostream& str);
    void code();
    CgenNodeP root();
+  // SymbolTable <Symbol, int*> attr_offset_table get_attr_offset() {return attr_offset_table;} 
+   //SymbolTable<Symbol, int> *attr_offset_table;
+
 };
 
 
@@ -71,6 +76,7 @@ private:
    int tag_val;  
    std::vector<attr_class*> attributes; 
    std::vector<method_class*> methods;                              // `NotBasic' otherwise
+   std::vector<method_class*> self_methods; 
 
 public:
    CgenNode(Class_ c,
@@ -86,8 +92,11 @@ public:
    void set_tag_val(int tag) {tag_val = tag;} 
    std::vector<attr_class*> get_attribs() { return attributes; } 
    std::vector<method_class*> get_methods() { return methods; }
+   std::vector<method_class *> get_self_methods() {return self_methods;} 
    void set_attrib(attr_class*  attrib) {attributes.push_back(attrib); } 
-   void set_method(method_class*  method) {methods.push_back(method); }  
+   void set_method(method_class*  method) {methods.push_back(method); } 
+   void set_self_method(method_class * method) {methods.push_back(method); }  
+   SymbolTable<Symbol, int> *attr_offset_table;
 
 };
 
