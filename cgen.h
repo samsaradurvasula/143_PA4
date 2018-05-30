@@ -9,12 +9,13 @@ enum Basicness     {Basic, NotBasic};
 #define TRUE 1
 #define FALSE 0
 
+//private SymbolTable<Symbol, attr_class> * attr_offset_table; 
+
 class CgenClassTable;
 typedef CgenClassTable *CgenClassTableP;
 
 class CgenNode;
 typedef CgenNode *CgenNodeP;
-
 
 class CgenClassTable : public SymbolTable<Symbol,CgenNode> {
 private:
@@ -26,7 +27,7 @@ private:
    int boolclasstag;
    int curr_class_tag;
    SymbolTable<Symbol, method_class> *method_table;  
-   SymbolTable<Symbol, int> *attr_offset_table;
+  // SymbolTable<Symbol, int> *attr_offset_table;
 
 // The following methods emit code for
 // constants and global declarations.
@@ -53,16 +54,16 @@ private:
    void install_classes(Classes cs);
    void build_inheritance_tree();
    void set_relations(CgenNodeP nd);
-   void set_all_attribs(CgenNodeP nd);
+   void set_all_attribs();
    void set_meth_init();  
-   void set_all_meth(CgenNodeP nd); 
+   void set_all_meth(); 
    std::vector<CgenNodeP> get_inheritance_path(CgenNodeP nd);  
    
 public:
    CgenClassTable(Classes, ostream& str);
    void code();
    CgenNodeP root();
-  // SymbolTable <Symbol, int*> attr_offset_table get_attr_offset() {return attr_offset_table;} 
+   //SymbolTable <Symbol, int*> attr_offset_table get_attr_offset() {return attr_offset_table;} 
    //SymbolTable<Symbol, int> *attr_offset_table;
 
 };
@@ -77,6 +78,7 @@ private:
    std::vector<attr_class*> attributes; 
    std::vector<method_class*> methods;                              // `NotBasic' otherwise
    std::vector<method_class*> self_methods; 
+//   SymbolTable<Symbol, int> *attr_offset_table = (new SymbolTable<Symbol, int> ());  
 
 public:
    CgenNode(Class_ c,
@@ -95,9 +97,14 @@ public:
    std::vector<method_class *> get_self_methods() {return self_methods;} 
    void set_attrib(attr_class*  attrib) {attributes.push_back(attrib); } 
    void set_method(method_class*  method) {methods.push_back(method); } 
-   void set_self_method(method_class * method) {methods.push_back(method); }  
-   SymbolTable<Symbol, int> *attr_offset_table;
+   void set_self_method(method_class * method) {self_methods.push_back(method); }
+//   SymbolTable<Symbol, int> attr_offset_table = new SymbolTable<Symbol, int> ();   
+   SymbolTable<Symbol, int>*  get_offset_tab() {return attr_offset_table;}  
+   void set_offset_tab( SymbolTable<Symbol, int> *new_offset_table) {attr_offset_table = new_offset_table;}  
 
+   //SymbolTable<Symbol, int> *attr_offset_table;
+
+   //void set_attrib_offset(Symbol name, {attr_offset_table
 };
 
 class BoolConst 

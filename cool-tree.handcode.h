@@ -8,6 +8,7 @@
 #include "tree.h"
 #include "cool.h"
 #include "stringtab.h"
+#include "symtab.h" 
 #define yylineno curr_lineno;
 extern int yylineno;
 
@@ -73,10 +74,13 @@ void dump_with_types(ostream&,int);
 #define Feature_EXTRAS                                        \
 virtual void dump_with_types(ostream&,int) = 0; \
 virtual Symbol get_name() = 0; 	\
+virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  = 0; \
 
 #define Feature_SHARED_EXTRAS                                       \
 void dump_with_types(ostream&,int);    \
 Symbol get_name() {return name;} \
+void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table);                       \
+
 
 #define Formal_EXTRAS                              \
 virtual void dump_with_types(ostream&,int) = 0;
@@ -98,13 +102,13 @@ void dump_with_types(ostream& ,int);
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
-virtual void code(ostream&) = 0; \
+virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
 Expression_class() { type = (Symbol) NULL; }
 
 #define Expression_SHARED_EXTRAS           \
-void code(ostream&); 			   \
+void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table); 			   \
 void dump_with_types(ostream&,int); 
 
 
