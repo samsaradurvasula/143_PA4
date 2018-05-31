@@ -78,7 +78,7 @@ private:
    std::vector<attr_class*> attributes; 
    std::vector<method_class*> methods;                              // `NotBasic' otherwise
    std::vector<method_class*> self_methods; 
-//   SymbolTable<Symbol, int> *attr_offset_table = (new SymbolTable<Symbol, int> ());  
+   //SymbolTable<Symbol, int> *attr_offset_table = ( new SymbolTable<Symbol, int> ());  
 
 public:
    CgenNode(Class_ c,
@@ -99,12 +99,13 @@ public:
    void set_method(method_class*  method) {methods.push_back(method); } 
    void set_self_method(method_class * method) {self_methods.push_back(method); }
 //   SymbolTable<Symbol, int> attr_offset_table = new SymbolTable<Symbol, int> ();   
-   SymbolTable<Symbol, int>*  get_offset_tab() {return attr_offset_table;}  
-   void set_offset_tab( SymbolTable<Symbol, int> *new_offset_table) {attr_offset_table = new_offset_table;}  
-
+  // SymbolTable<Symbol, int>*  get_offset_tab() {return attr_offset_table;}  
+   //void set_offset_tab( SymbolTable<Symbol, int> *new_offset_table) {attr_offset_table = new_offset_table;}  
+  // void set_attrib_offset(Symbol name, int* offset) {attr_offset_table->addid(name, offset);} 
    //SymbolTable<Symbol, int> *attr_offset_table;
 
    //void set_attrib_offset(Symbol name, {attr_offset_table
+   void code(ostream&s, SymbolTable<Symbol, int> * attr_offset_table, SymbolTable<Symbol, int> * method_offset_table);  
 };
 
 class BoolConst 

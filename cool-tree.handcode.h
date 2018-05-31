@@ -1,3 +1,4 @@
+
 //
 // The following include files must come first.
 
@@ -20,6 +21,9 @@ inline void dump_Boolean(ostream& stream, int padding, Boolean b)
 void dump_Symbol(ostream& stream, int padding, Symbol b);
 void assert_Symbol(Symbol b);
 Symbol copy_Symbol(Symbol b);
+
+class CgenClassTable; 
+
 
 class Program_class;
 typedef Program_class *Program;
@@ -74,12 +78,12 @@ void dump_with_types(ostream&,int);
 #define Feature_EXTRAS                                        \
 virtual void dump_with_types(ostream&,int) = 0; \
 virtual Symbol get_name() = 0; 	\
-virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  = 0; \
+virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> *method_offset_table)  = 0; \
 
 #define Feature_SHARED_EXTRAS                                       \
 void dump_with_types(ostream&,int);    \
 Symbol get_name() {return name;} \
-void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table);                       \
+void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table,SymbolTable<Symbol, int> *method_offset_table );                       \
 
 
 #define Formal_EXTRAS                              \
@@ -102,13 +106,13 @@ void dump_with_types(ostream& ,int);
 Symbol type;                                 \
 Symbol get_type() { return type; }           \
 Expression set_type(Symbol s) { type = s; return this; } \
-virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  = 0; \
+virtual void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> *method_offset_table)  = 0; \
 virtual void dump_with_types(ostream&,int) = 0;  \
 void dump_type(ostream&, int);               \
 Expression_class() { type = (Symbol) NULL; }
 
 #define Expression_SHARED_EXTRAS           \
-void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table); 			   \
+void code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> *method_offset_table); 			   \
 void dump_with_types(ostream&,int); 
 
 

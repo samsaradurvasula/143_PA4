@@ -1,4 +1,3 @@
-
 //**************************************************************
 //
 // Code generator SKELETON
@@ -29,8 +28,9 @@
 #include <symtab.h> 
 //Attributes and methods are not being differentiated! 
 extern void emit_string_constant(ostream& str, char *s);
-extern int cgen_debug; 
-extern SymbolTable<Symbol, int>* attr_offset_tab = new SymbolTable<Symbol, int>(); 
+extern int cgen_debug;
+//extern int curr_attr_offset =0;  
+//extern SymbolTable<Symbol, int>* attr_offset_tab = new SymbolTable<Symbol, int>(); 
 //
 // Three symbols from the semantic analyzer (semant.cc) are used.
 // If e : No_type, then no code is generated for e.
@@ -139,7 +139,12 @@ void program_class::cgen(ostream &os)
 
   initialize_constants();
   CgenClassTable *codegen_classtable = new CgenClassTable(classes,os);
-
+  //codegen_classtable -> enterscope();  
+  //SymbolTable <Symbol, int>* attr_offset_table = new SymbolTable<Symbol, int> (); 
+  //for (int j = classes -> first(); classes -> more(j); j = classes -> next(j))
+ // codegen_classtable -> lookup(Object) -> code(os, attr_offset_table, codegen_classtable);
+  //codegen_classtable -> root();  
+  //codegen_classtable -> exitscope();  
   os << "\n# end of generated code\n";
 }
 
@@ -576,6 +581,9 @@ void CgenClassTable::code_bools(int boolclasstag)
   truebool.code_def(str,boolclasstag);
 }
 
+//CgenClassTable * b_table; 
+//CgenNodeP b_node; 
+
 void CgenClassTable::code_select_gc()
 {
   //
@@ -606,6 +614,7 @@ void CgenClassTable::code_select_gc()
 //
 //********************************************************
 
+CgenClassTableP b_table; 
 void CgenClassTable::code_constants()
 {
   //
@@ -653,20 +662,17 @@ void CgenClassTable:: code_class_objtab()
 void CgenClassTable:: code_disptab() 
 { 	//set_meth_init(); 
  	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
-	   { 
+	   { 	
 		CgenNodeP currNode = nd_vector[i];
+		str<<currNode -> get_name()<<DISPTAB_SUFFIX; 
 		//set_all_meth(currNode); 
 		std::vector<method_class*> node_methods = currNode -> get_methods(); 
-		str<<currNode -> get_name()<<DISPTAB_SUFFIX<<endl; 
 			for (std::size_t j = 0, max = node_methods.size(); j != max; ++j)
 	        	   {
-				str<<WORD<<(node_methods[j]) -> get_name()<<endl; 
-				 StringEntry * string_entry = stringtable.lookup_string(currNode->get_name() -> get_string());
-                		string_entry -> code_ref(str);
-			   } 
-	   } 
-		str<<endl; 
-
+				emit_method_ref(currNode -> get_name(), node_methods[j] -> get_name(), str);
+				str<<endl;  
+	   		   } 
+           } 
 
 }  
 
@@ -705,17 +711,6 @@ void CgenClassTable:: code_obj_init()
 
      } 
 
-/* 
-
-   {  CgenNodeP currNode = nd_vector[i]; 
-	str<<currNode -> get_name()<<CLASSINIT_SUFFIX<<endl;  	
-	emitaddiu(SP,SP, -12, str); 
-	//We need to keep track of the parent attributes, but ONLY want to print our attributes and then jump to parent class with the jal instruction 
-
-
-	*/ 
-
-
 }  
 
 
@@ -731,11 +726,15 @@ CgenClassTable::CgenClassTable(Classes classes, ostream& s) : nds(NULL) , str(s)
    install_basic_classes();
    install_classes(classes);
    build_inheritance_tree();
-//   set_meth_init(); 
-//   set_all_meth(); 
-//   set_all_attribs(); 
-   code();
-   exitscope();
+   //set_meth_init(); 
+  // set_all_meth(); 
+  // set_all_attribs(); 
+  code();
+  SymbolTable <Symbol, int>* attr_offset_table = new SymbolTable<Symbol, int> ();
+  SymbolTable <Symbol, int>* method_offset_table = new SymbolTable<Symbol, int>();  
+  //CgenNodeP root = codegen_classtable -> root(); 
+  root() -> code(s, attr_offset_table, method_offset_table) ; 
+  exitscope();
 }
 
 void CgenClassTable::install_basic_classes()
@@ -743,6 +742,7 @@ void CgenClassTable::install_basic_classes()
 
 // The tree package uses these globals to annotate the classes built below.
   //curr_lineno  = 0;
+  b_table = this; 
   Symbol filename = stringtable.add_string("<basic class>");
 
 //
@@ -923,10 +923,10 @@ std::vector<CgenNodeP> CgenClassTable:: get_inheritance_path(CgenNodeP nd)
 void CgenClassTable::set_all_attribs() 
 {	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i) 
 	   {    CgenNodeP nd = nd_vector[i]; 
-		int curr_offset =0; 
+		//int curr_offset =0; 
 		//SymbolTable<Symbol, int>* attr_offset_tab = nd -> get_offset_tab(); 
   		//attr_offset_tab = nd->get_offset_tab();  
-	 	attr_offset_tab->enterscope(); 
+	 	//(nd->get_offset_tab())->enterscope(); 
 	 	std::vector<CgenNodeP> ancestor_nodes = get_inheritance_path(nd); 
 	 	for (std::size_t k = 0, max = ancestor_nodes.size(); k != max; ++k) 
 	    	   {   //nd->attr_offset_table = new SymbolTable<Symbol, int> (); 
@@ -935,7 +935,7 @@ void CgenClassTable::set_all_attribs()
 		  	Features ancestor_features = curr_ancestor -> get_features();
         	  	for (int j = ancestor_features -> first(); ancestor_features -> more(j); j = ancestor_features -> next(j))
            	     	   {	
-				curr_offset++; 
+		//		curr_offset++; 
                 		Feature f = ancestor_features -> nth(j);
                 		attr_class *attr   = dynamic_cast <attr_class *> (f);
                         	if(attr != NULL) { 
@@ -946,7 +946,8 @@ void CgenClassTable::set_all_attribs()
 				offset = strcat(offset, "($fp)"); 
 				attr_offset_table -> addid(attr -> get_name(), offset); */  
 			  
-				attr_offset_tab -> addid(attr->get_name(), &curr_offset); 
+				//	nd->set_attrib_offset(attr -> get_name(), &curr_offset); 
+				//attr_offset_tab -> addid(attr->get_name(), &curr_offset); 
  
 			  	} 
            	     	   }	
@@ -958,8 +959,7 @@ void CgenClassTable::set_all_attribs()
 	Features features = nd -> get_features(); 
 	//nd -> attr_offset_table->enterscope(); 
 	for (int m = features -> first(); features -> more(m); m = features -> next(m)) 
-	   {	curr_offset++; 
-
+	   {	 
 		Feature f = features -> nth(m);
 		attr_class *attr   = dynamic_cast <attr_class *> (f);  
 			if (attr!=NULL) { 
@@ -969,11 +969,12 @@ void CgenClassTable::set_all_attribs()
 				 sprintf(offset, "%d", offset_val); 
 				 offset = strcat(offset, "($fp)"); */ 
 				 //attr_offset_table -> addid(attr -> get_name(), offset); 
-				 attr_offset_tab -> addid(attr -> get_name(), &curr_offset);  
+				 //attr_offset_tab -> addid(attr -> get_name(), &curr_offset);
+		//		 nd->set_attrib_offset(attr -> get_name(), &curr_offset);   
 			  } 
 	   } 
 	//nd -> set_offset_tab(attr_offset_tab); 
-	attr_offset_tab -> exitscope();
+	//(nd->get_offset_tab()) -> exitscope();
 	 
 	}
 }  
@@ -1036,7 +1037,7 @@ void CgenClassTable::set_all_meth()
  
 } 
 
- void CgenClassTable::code_methods() 
+ /* void CgenClassTable::code_methods() 
 { //Entry point into the AST to generate code recursively 
 	str<<"";   
 	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i) 
@@ -1048,20 +1049,21 @@ void CgenClassTable::set_all_meth()
 			for (std::size_t j = 0, max = node_methods.size(); j != max; ++j)	 
 			   { 
 				method_class* currMethod = node_methods[j];
-				//*currNode -> attr_offset_table;  
-				SymbolTable<Symbol, int>* attr_offset_table= currNode ->get_offset_tab();
+				*currNode -> attr_offset_table;  
+				currNode ->get_offset_tab() -> enterscope(); 
 				 
-				currMethod -> code(str, attr_offset_table);
+				currMethod -> code(str, currNode -> get_offset_tab());
 				//if (cgen_debug) cout<<attr_offset_table<<endl;  
 				str<<currNode -> get_name()<<"."<<currMethod -> name<<endl; 
 				StringEntry * se = stringtable.lookup_string(currNode -> get_name() ->get_string()); 
 				se -> code_ref(str); 
+				currNode -> get_offset_tab() -> exitscope(); 
 				
 			   }
 	   	
 		  } 
 	    }
-}  
+}  */ 
 
 
 
@@ -1149,8 +1151,8 @@ void CgenClassTable::code()
   if (cgen_debug) cout<< "coding object initializer"<<endl; 
   code_obj_init(); 
 
-  if (cgen_debug) cout << "coding methods"<<endl; 
-  code_methods(); 
+  /*if (cgen_debug) cout << "coding methods"<<endl; 
+  code_methods(); */  
 }
 
 
@@ -1159,9 +1161,10 @@ CgenNodeP CgenClassTable::root()
    return probe(Object);
 }
 
-
-
-
+CgenNodeP b_node;  
+int curr_attr_offset; 
+int label_num = 0; 
+int curr_method_offset;  
 ///////////////////////////////////////////////////////////////////////
 //
 // CgenNode methods
@@ -1188,163 +1191,313 @@ CgenNode::CgenNode(Class_ nd, Basicness bstatus, CgenClassTableP ct) :
 //
 //*****************************************************************
 
-/*   void CgenClassTable::code_methods() 
-{ //Entry point into the AST to generate code recursively 
-	str<<"";   
-	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i) 
-	   { 
-		CgenNodeP currNode = nd_vector[i];  
-		if (currNode -> basic() == 0) //Not an int, string, object, bool 
-		  {  
-			std::vector<method_class*> node_methods = currNode -> get_self_methods(); //Uninherited methods 
-			for (std::size_t j = 0, max = node_methods.size(); j != max; ++j)	 
-			   { 
-				method_class* currMethod = node_methods[j];
-				currNode -> attr_offset_table;  
-				SymbolTable<Symbol, int>* attr_offset_table= currNode ->get_offset_tab();
-				 
-				currMethod -> code(str, attr_offset_table);
-				//if (cgen_debug) cout<<attr_offset_table<<endl;  
-				str<<currNode -> get_name()<<"."<<currMethod -> name<<endl; 
-				StringEntry * se = stringtable.lookup_string(currNode -> get_name() ->get_string()); 
-				se -> code_ref(str); 
-				
-			   }
-	   	
-		  } 
-	    }
-} */ 
+void CgenNode::code(ostream&s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
+//First step into methods
+b_node = this; 
+curr_attr_offset = 2; //Default obj fields 
+//label_num = 0;  
+curr_method_offset = 0; 
+attr_offset_table -> enterscope();
+method_offset_table -> enterscope();   
+std::vector<method_class*> node_methods = this -> get_self_methods();
+std::vector<attr_class*> node_attribs = this -> get_attribs(); 
+//std::vector<CgenNodeP> children = this -> get_children();   
+std::vector<method_class *> inherited_methods = this -> get_methods();
+ for (std::size_t i = 0, max = inherited_methods.size(); i != max; ++i) //Just for bookkeeping 
+    { 	
+	curr_method_offset++; 
+	method_offset_table -> addid(inherited_methods[i] -> name, &curr_method_offset);  
+    } 
+ for (std::size_t i = 0, max = node_attribs.size(); i != max; ++i)
+    {   curr_attr_offset++; 
+//Step into attributes and add identifiers to the offset table 
+	attr_offset_table->addid(node_attribs[i] -> get_name(), &curr_attr_offset);  
+	node_attribs[i] -> code(s, attr_offset_table, method_offset_table); 
+    } 
+ if ( this -> basic() == 0) { //Not a standard class 
+ 	for (std::size_t i = 0, max = node_methods.size(); i != max; ++i) 
+    	   { 	s<<this -> get_name()<<"."<<node_methods[i] -> name<<endl; 
+               // StringEntry * se = id_table.lookup_string(node_methods[i] -> get_name() ->get_string()); 
+               // se->code_ref(s); 
+		node_methods[i] -> code(s, attr_offset_table, method_offset_table); 
 
-void method_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) { 
-//Loop through formals and generate code for them
-//Bookeeping and we have to keep track of the frame pointer here!!!! 
-	//need to keep track of formal length 
-	expr -> code(s, attr_offset_table); 
+           }   
+   }   
+
+ for(List<CgenNode> *l = this->get_children(); l; l = l->tl())
+   { 
+	    (l->hd()) -> code(s, attr_offset_table, method_offset_table);
+   }  
+
+attr_offset_table -> exitscope(); 
+method_offset_table -> exitscope(); 
+} 
 
 
 
+void method_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
+//There's some bookeeping code and moving stufff that we have to emit here  
+//attr_offset_table -> enterscope(); 
+for (int i = this -> formals -> first (); this ->formals -> more (i);
+       i = this ->formals -> next (i))
+    {	
+	formal_class *f = dynamic_cast <formal_class*> (formals -> nth (i));
+	curr_attr_offset++; 
+	attr_offset_table -> addid(f -> name, &curr_attr_offset); 
+	
+    } 
+	expr -> code(s, attr_offset_table, method_offset_table); 
+	//Some more bookeeping stuff that has to come at the end 
+
+//attr_offset_table -> exitscope(); 
 }
 
 
-void attr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  { 
+void attr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  { 
 
 //lookup the identifier in the attr_offset_table and then emit using the offset 
 
-
-
-
 }    
 
-void assign_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  {
+ void assign_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
+	attr_offset_table -> enterscope(); 
 	if (cgen_debug) cout<<attr_offset_table<<endl; 
-	this->expr -> code(s, attr_offset_table);
+	this->expr -> code(s, attr_offset_table, method_offset_table);
 	SymbolTable<Symbol, int>* offset_tab = attr_offset_table;  
-	//*(attr_offset_table)->enterscope();  
-	int new_offset = *(offset_tab->lookup(this -> name)); 
+	//attr_offset_table->enterscope();  
+	int new_offset = *(attr_offset_table->lookup(this -> name)); 
 	//load address then store word 
-	char * offset = "";   
-        sprintf(offset, "%d", new_offset); 
-        offset = strcat(offset, "($fp)"); 	
-	emit_load_address(ACC, offset, s); 
+//	char * offset = "";   
+ //       sprintf(offset, "%d", new_offset); 
+  //       offset = strcat(offset, "($fp)"); 	
+//	emit_load_address(ACC, offset, s); 
 	emit_store(SELF, new_offset, ACC, s); 
-	//(attr_offset_table)->exitscope();      
+	attr_offset_table->exitscope();      
 	
 } 
+  
+void static_dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
+   for (int i = this -> actual -> first (); this ->actual -> more (i);
+       i = this ->actual -> next (i))
+    {
+		actual->nth(i) -> code(s, attr_offset_table, method_offset_table); 
 
-void static_dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  {
-	
+    }
+   
+    Symbol type; 
 
+    if (this -> type_name == SELF_TYPE) { 
+	 type = b_node -> get_name(); 
+    } else {  
+
+   	 type = this -> type_name; 
+    } 
+    this -> expr -> code(s, attr_offset_table, method_offset_table);
+    //int offset = * (method_offset_table->lookup(type)); 
+    CgenNodeP class_node = b_table->lookup(type);
+    int curr_offset = 0; 
+     std::vector<method_class*> methods = class_node -> get_methods(); 
+        for (std::size_t i = 0, max = methods.size(); i != max; ++i)
+           {    
+                if (this->name == methods[i] ->name) break;
+                curr_offset++;
+           }   
+    label_num++; 
+    emit_label_ref(label_num, s); 
+    emit_load(T1, 8, ACC, s); 
+    emit_load(T1, curr_offset, T1, s); 
+    emit_jalr(T1, s); 
+    
+   //Some stack bookeeping we have to do at the end here 
+     
 }
+void dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
+   for (int i = this -> actual -> first (); this ->actual -> more (i);
+       i = this ->actual -> next (i))
+    {
+                actual->nth(i) -> code(s, attr_offset_table, method_offset_table);
 
-void dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  {
+    }
+
+     if (this -> get_type() == SELF_TYPE) {
+         type = b_node -> get_name();
+    } else {
+
+         type = this -> get_type();
+    }
+
+
+    this -> expr -> code(s, attr_offset_table, method_offset_table);
+    //Method dispatch preparation here and then we define the appropriate label 
+    //int offset = * (method_offset_table->lookup(type));
+    CgenNodeP class_node = b_table->lookup(type);
+    int curr_offset = 2;
+     std::vector<method_class*> methods = class_node -> get_methods();
+        for (std::size_t i = 0, max = methods.size(); i != max; ++i)
+           {
+                if (this->name == methods[i] ->name) break;
+                curr_offset++;
+           }
+
+    label_num++;
+    emit_label_ref(label_num, s);
+    emit_load(T1, 2, ACC, s);
+    emit_load(T1, curr_offset, T1, s);
+    emit_jalr(T1, s);    	
 } 
 
-void cond_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void cond_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+
+
+
+
+
 }
 
-void loop_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void loop_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+
+
+
+
+
+
 }
 
-void typcase_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void typcase_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+
+//TOMORROW 
+
+
+
 }
 
-void block_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) { 
+void block_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
 	for (int i = body -> first (); body -> more (i); i = body -> next (i))
            { 
-			body->nth(i) -> code(s, attr_offset_table);
+			body->nth(i) -> code(s, attr_offset_table, method_offset_table);
 	   }   
 }	 
 
-void let_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void let_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+	
+
+
+
+
+
+
 }
 
-void plus_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+
+
+void plus_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 //Need to recursively check the two expressions, but both will evaluate to int per the semantic checker. Then call add on them, store the value in V1 and push the result to a new location on the stack 
-	
+/* el -> code(s, attr_offset_table, classtable); 
+emit_push(ACC, s); 
+e2 -> code(s, attr_offset_table, classtable); 
+
+
+
+emit_push(ACC, s); 
+emit_jal("Object copy", s); */  
+ 
+ 	
 
 	
 }
 
-void sub_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void sub_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+/*el -> code(s, attr_offset_table, classtable);  
+emit_push(ACC, s); 
+e2 -> code(s, attr_offset_table, classtable); 
+
+
+
+emit_push(ACC, s); 
+emit_jal("Object copy", s); */  	 
+
+
+
+}
+
+void mul_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+/* el -> code(s, attr_offset_table, classtable);  
+emit_push(ACC, s); 
+e2 -> code(s, attr_offset_table, classtable); 
+
+
+
+emit_push(ACC, s); 
+emit_jal("Object copy", s); */  
+
+
+
+
+
+}
+
+void divide_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+/* el -> code(s, attr_offset_table, classtable);  
+emit_push(ACC, s); 
+e2 -> code(s, attr_offset_table, classtable); 
+
+
+
+emit_push(ACC, s); 
+emit_jal("Object copy", s); */  
+
+
+
+
+
+}
+
+
+void neg_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table){
 	
 
-
-
 }
 
-void mul_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void lt_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void divide_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void eq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void neg_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table){
-	
-
+void leq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void lt_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void comp_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void eq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
-}
-
-void leq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
-}
-
-void comp_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
-}
-
-void int_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) 
+void int_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) 
 {
   //
   // Need to be sure we have an IntEntry *, not an arbitrary Symbol
   //
   emit_load_int(ACC,inttable.lookup_string(token->get_string()),s);
-}
 
-void string_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)
+} 
+void string_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)
 {
   emit_load_string(ACC,stringtable.lookup_string(token->get_string()),s);
 }
 
-void bool_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) 
+void bool_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) 
 {
   emit_load_bool(ACC, BoolConst(val), s);
 }
 
-void new__class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void new__class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void isvoid_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void isvoid_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
-void no_expr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table)  {
+void no_expr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
 //That's all, folks! 
 }
 
-void object_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table) {
+void object_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 	
-}
-
-
+}    
