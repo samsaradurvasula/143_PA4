@@ -24,7 +24,8 @@
 //set tags, code_nameTab, code_objTab, get_all_attributes, get_all_methods, nd_vector to hold the nodes separately from a list 
 #include "cgen.h"
 #include "cgen_gc.h"
-#include <string> 
+#include <string>
+#include<algorithm> 
 #include <symtab.h> 
 //Attributes and methods are not being differentiated! 
 extern void emit_string_constant(ostream& str, char *s);
@@ -411,7 +412,7 @@ void StringEntry::code_def(ostream& s, int stringclasstag)
 
 
  /***** Add dispatch information for class String ******/
-
+      s<<"String"<<DISPTAB_SUFFIX;  
       s << endl;                                              // dispatch table
       s << WORD;  lensym->code_ref(s);  s << endl;            // string length
   emit_string_constant(s,str);                                // ascii string
@@ -453,7 +454,7 @@ void IntEntry::code_def(ostream &s, int intclasstag)
       << WORD; 
 
  /***** Add dispatch information for class Int ******/
-
+      s<<"Int"<<DISPTAB_SUFFIX;  
       s << endl;                                          // dispatch table
       s << WORD << str << endl;                           // integer value
 }
@@ -497,7 +498,7 @@ void BoolConst::code_def(ostream& s, int boolclasstag)
       << WORD;
 
  /***** Add dispatch information for class Bool ******/
-
+      s<<Bool<<DISPTAB_SUFFIX;  
       s << endl;                                            // dispatch table
       s << WORD << val << endl;                             // value (0 or 1)
 }
@@ -535,7 +536,6 @@ void CgenClassTable::code_global_data()
   str << GLOBAL << INTTAG << endl;
   str << GLOBAL << BOOLTAG << endl;
   str << GLOBAL << STRINGTAG << endl;
-
   //
   // We also need to know the tag of the Int, String, and Bool classes
   // during code generation.
@@ -664,12 +664,12 @@ void CgenClassTable:: code_disptab()
  	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
 	   { 	
 		CgenNodeP currNode = nd_vector[i];
-		str<<currNode -> get_name()<<DISPTAB_SUFFIX; 
+		str<<currNode -> get_name()<<DISPTAB_SUFFIX<<LABEL; 
 		//set_all_meth(currNode); 
 		std::vector<method_class*> node_methods = currNode -> get_methods(); 
 			for (std::size_t j = 0, max = node_methods.size(); j != max; ++j)
-	        	   {
-				emit_method_ref(currNode -> get_name(), node_methods[j] -> get_name(), str);
+	        	   {    str<<WORD;
+				emit_method_ref(((currNode-> method_parents.find(node_methods[j] -> get_name())) -> second), node_methods[j] -> get_name(), str);
 				str<<endl;  
 	   		   } 
            } 
@@ -686,32 +686,104 @@ void CgenClassTable:: code_prototypes()
 		str<<WORD<<-1<<endl; //Garbage collection tag 
 //		CgenNodeP currNode = nd_vector[i]; 
 		Symbol node_name = currNode -> get_name(); 
-		str<<node_name<<PROTOBJ_SUFFIX<<LABEL<<endl; 
+		str<<node_name<<PROTOBJ_SUFFIX<<LABEL;  
 		str<<WORD<<currNode -> get_tag_val()<<endl;
 		std::vector<attr_class*> node_attribs = currNode -> get_attribs();  
-		str<<WORD<<node_attribs.size() + DEFAULT_OBJFIELDS<<endl;
+		str<<WORD<<node_attribs.size() + DEFAULT_OBJFIELDS<<endl; 
 		str<<WORD<<node_name<<DISPTAB_SUFFIX<<endl; 
-		StringEntry * string_entry = stringtable.lookup_string(node_name -> get_string());   
-		string_entry -> code_ref(str); 	
+		//StringEntry * string_entry = stringtable.lookup_string(node_name -> get_string());   
+		//string_entry -> code_ref(str);
+		for (std::size_t j = 0, max = node_attribs.size(); j != max; ++j) 
+		   { 
+			Symbol attr_type = node_attribs[j] -> type_decl; 
+			if (attr_type == Str) { 
+				str<<WORD; 
+				StringEntry * se = stringtable.lookup_string(""); 
+				se -> code_ref(str); 
+				str<<endl; 
+			} 
+			
+			if (attr_type == Int) { 
+			 	str <<WORD; 
+				inttable.lookup_string("0")->code_ref(str); 
+				str<<endl; 
+			} 
+			
+			if (attr_type == Bool) { 
+				str<<WORD;    	
+				falsebool.code_ref(str);
+				str<<endl; 
+			} else { 
+				str<<WORD; 
+				str<<0<<endl; 
+ 
+	  	 	} 
 
-	   } 
 
-
-}
+		  }	
+	    } 
+}  	
 
 void CgenClassTable:: code_obj_init() 
-{  for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
+{  str<<""; 
+   for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
      { 
 	CgenNodeP currNode = nd_vector[i];  
-	if (cgen_debug) cout<<"LOSING MY MIND"<<endl;  
+	emit_init_ref(currNode -> get_name(), str); 
+	str<<LABEL;  
+	emit_addiu(SP, SP, -12, str);  
+	emit_store(FP, 3, SP, str); 
+	emit_store(SELF, 2, SP, str); 
+	emit_store(RA, 1, SP, str);  
 
-
-
-
-
-     } 
-
+	emit_addiu(FP, SP, 16, str);
+	emit_move(SELF, ACC, str); 
+	if (currNode -> get_parentnd() -> get_name() != No_class) {
+		str<<JAL; 
+		emit_init_ref((currNode -> get_parentnd() -> get_name()), str); 
+		str<<endl; 
+	} 
+	
+	std::vector<attr_class*> node_attribs = currNode -> get_attribs(); 
+	SymbolTable<Symbol, int>* temp_offset_table = new SymbolTable<Symbol, int>(); 
+	SymbolTable<Symbol, int> * temp_method_table = new SymbolTable<Symbol, int>(); 
+	temp_offset_table->enterscope(); 
+	int curr_offset = 2; 
+	 for (std::size_t j = 0, max = node_attribs.size(); j != max; ++j)
+	    { 
+		curr_offset++; 
+		if (node_attribs[j] -> init -> type == no_expr_class().type) { 
+			if (node_attribs[j] -> type_decl == Int) {
+				emit_load_int(ACC, inttable.lookup_string("0"), str);
+				emit_store(ACC, curr_offset, SELF, str); 	  
+			} 
+			
+			if (node_attribs[j] -> type_decl == Str) { 
+				emit_load_string(ACC, stringtable.lookup_string(""), str); 
+				emit_store(ACC, curr_offset,SELF, str); 
+			} 
+			
+			if (node_attribs[j] -> type_decl == Bool) { 
+				emit_load_bool(ACC, BoolConst(0), str); 
+				emit_store(ACC, curr_offset,SELF, str); 
+			} 
+		
+		} else { 
+			node_attribs[j] -> init -> code(str, temp_offset_table, temp_method_table); 
+			emit_store(ACC, curr_offset, SELF, str); 
+		 } 
+	      }
+ 
+	 temp_offset_table -> exitscope();
+	 emit_move(ACC, SELF, str); 
+	 emit_load(FP, 3, SP, str); 
+	 emit_load(SELF, 2, SP, str); 
+	 emit_load(RA, 1, SP, str);
+	 emit_addiu(SP, SP, 12, str); 
+	 emit_return(str); 
+	}
 }  
+  
 
 
 
@@ -893,7 +965,7 @@ void CgenClassTable::install_class(CgenNodeP nd)
   else if (name == Bool) 
     { 
 	tag = boolclasstag; 
-    } 
+   } 
 
   else 
     { 
@@ -939,16 +1011,7 @@ void CgenClassTable::set_all_attribs()
                 		Feature f = ancestor_features -> nth(j);
                 		attr_class *attr   = dynamic_cast <attr_class *> (f);
                         	if(attr != NULL) { 
-					nd->set_attrib(attr);
-			/* 	int offset_val = (12 + (curr_offset *4)); 
-				char * offset; 
-				sprintf(offset, "%d",offset_val);   
-				offset = strcat(offset, "($fp)"); 
-				attr_offset_table -> addid(attr -> get_name(), offset); */  
-			  
-				//	nd->set_attrib_offset(attr -> get_name(), &curr_offset); 
-				//attr_offset_tab -> addid(attr->get_name(), &curr_offset); 
- 
+					nd->set_attrib(attr); 
 			  	} 
            	     	   }	
 		  //nd->attr_offset_table->exitscope(); 	
@@ -964,29 +1027,20 @@ void CgenClassTable::set_all_attribs()
 		attr_class *attr   = dynamic_cast <attr_class *> (f);  
 			if (attr!=NULL) { 
 				 nd->set_attrib(attr); 
-				 /* int offset_val =(12 + (curr_offset * 4)); 
-				 char * offset; 
-				 sprintf(offset, "%d", offset_val); 
-				 offset = strcat(offset, "($fp)"); */ 
-				 //attr_offset_table -> addid(attr -> get_name(), offset); 
-				 //attr_offset_tab -> addid(attr -> get_name(), &curr_offset);
-		//		 nd->set_attrib_offset(attr -> get_name(), &curr_offset);   
 			  } 
 	   } 
-	//nd -> set_offset_tab(attr_offset_tab); 
-	//(nd->get_offset_tab()) -> exitscope();
-	 
-	}
+	 }
 }  
 
-
+//SymbolTable<Symbol, Symbol> *method_parents = new SymbolTable<Symbol, Symbol>();
 void CgenClassTable::set_meth_init() 
 { 	
 	method_table = new SymbolTable <Symbol, method_class> (); 
 	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i)
 	   { 
 		method_table->enterscope();
-		CgenNodeP currNode = nd_vector[i];  
+		CgenNodeP currNode = nd_vector[i];
+		Symbol node_name = currNode -> get_name();   
 		Features features = currNode -> get_features();
         	for (int i = features -> first(); features -> more(i);i =  features -> next(i))
            	   {   
@@ -999,7 +1053,8 @@ void CgenClassTable::set_meth_init()
 		
 				if ((method_table->lookup(method -> get_name())) == NULL)
 			  	   {  
-					method_table->addid(method -> get_name(), method);   
+					method_table->addid(method -> get_name(), method);
+					currNode -> method_parents.insert(std::make_pair(method -> get_name(), node_name));    
            		  	   }	 	
 	    	    	  }
 		    } 
@@ -1029,50 +1084,15 @@ void CgenClassTable::set_all_meth()
 				} 
 			     }    
 			if (!overwrite_method && method != NULL) {nd->set_method(method);} 
-			
+			nd -> method_parents.insert(std::make_pair(method -> get_name(), ancestor_nodes[m] -> get_name()));			
                           }  
             	    }
 
 	    }
+
+	//std::reverse(nd->get_methods().begin(), nd->get_methods().end()); 
  
 } 
-
- /* void CgenClassTable::code_methods() 
-{ //Entry point into the AST to generate code recursively 
-	str<<"";   
-	for (std::size_t i = 0, max = nd_vector.size(); i != max; ++i) 
-	   { 
-		CgenNodeP currNode = nd_vector[i];  
-		if (currNode -> basic() == 0) //Not an int, string, object, bool 
-		  {  
-			std::vector<method_class*> node_methods = currNode -> get_self_methods(); //Uninherited methods 
-			for (std::size_t j = 0, max = node_methods.size(); j != max; ++j)	 
-			   { 
-				method_class* currMethod = node_methods[j];
-				*currNode -> attr_offset_table;  
-				currNode ->get_offset_tab() -> enterscope(); 
-				 
-				currMethod -> code(str, currNode -> get_offset_tab());
-				//if (cgen_debug) cout<<attr_offset_table<<endl;  
-				str<<currNode -> get_name()<<"."<<currMethod -> name<<endl; 
-				StringEntry * se = stringtable.lookup_string(currNode -> get_name() ->get_string()); 
-				se -> code_ref(str); 
-				currNode -> get_offset_tab() -> exitscope(); 
-				
-			   }
-	   	
-		  } 
-	    }
-}  */ 
-
-
-
-
-
-
-
-
-
 
 
 void CgenClassTable::install_classes(Classes cs)
@@ -1115,10 +1135,10 @@ void CgenNode::set_parentnd(CgenNodeP p)
   parentnd = p;
 }
 
-
+//SymbolTable<Symbol, Symbol> *method_parents = new SymbolTable<Symbol, Symbol>();
 
 void CgenClassTable::code()
-{ 
+{   
   if (cgen_debug) cout << "coding global data" << endl;
   code_global_data();
 
@@ -1127,7 +1147,8 @@ void CgenClassTable::code()
 
   if (cgen_debug) cout << "coding constants" << endl;
   code_constants();
-
+  
+  //SymbolTable<Symbol, Symbol> method_parents = new SymbolTable<Symbol, Symbol>(); 
   set_meth_init(); 
   set_all_meth(); 
   set_all_attribs(); 
@@ -1209,14 +1230,15 @@ std::vector<method_class *> inherited_methods = this -> get_methods();
 	method_offset_table -> addid(inherited_methods[i] -> name, &curr_method_offset);  
     } 
  for (std::size_t i = 0, max = node_attribs.size(); i != max; ++i)
-    {   curr_attr_offset++; 
+    {   //curr_attr_offset++; 
 //Step into attributes and add identifiers to the offset table 
 	attr_offset_table->addid(node_attribs[i] -> get_name(), &curr_attr_offset);  
-	node_attribs[i] -> code(s, attr_offset_table, method_offset_table); 
+	//node_attribs[i] -> code(s, attr_offset_table, method_offset_table);
+	curr_attr_offset++;   
     } 
  if ( this -> basic() == 0) { //Not a standard class 
  	for (std::size_t i = 0, max = node_methods.size(); i != max; ++i) 
-    	   { 	s<<this -> get_name()<<"."<<node_methods[i] -> name<<endl; 
+    	   { 	s<<this -> get_name()<<"."<<node_methods[i] -> name<<LABEL;  
                // StringEntry * se = id_table.lookup_string(node_methods[i] -> get_name() ->get_string()); 
                // se->code_ref(s); 
 		node_methods[i] -> code(s, attr_offset_table, method_offset_table); 
@@ -1237,7 +1259,13 @@ method_offset_table -> exitscope();
 
 void method_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
 //There's some bookeeping code and moving stufff that we have to emit here  
-//attr_offset_table -> enterscope(); 
+//attr_offset_table -> enterscope();
+        emit_addiu(SP, SP, -12, s);
+        emit_store(FP, 3, SP, s);
+        emit_store(SELF, 2, SP, s);  
+        emit_store(RA, 1, SP, s);
+	emit_addiu(FP, SP, 16, s);
+        emit_move(SELF, ACC, s); 
 for (int i = this -> formals -> first (); this ->formals -> more (i);
        i = this ->formals -> next (i))
     {	
@@ -1249,13 +1277,19 @@ for (int i = this -> formals -> first (); this ->formals -> more (i);
 	expr -> code(s, attr_offset_table, method_offset_table); 
 	//Some more bookeeping stuff that has to come at the end 
 
-//attr_offset_table -> exitscope(); 
+//attr_offset_table -> exitscope();
+	 emit_load(FP, 3, SP, s);
+         emit_load(SELF, 2, SP, s);
+         emit_load(RA, 1, SP, s);
+         emit_addiu(SP, SP, 12, s);
+         emit_return(s); 
+
 }
 
 
-void attr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  { 
 
-//lookup the identifier in the attr_offset_table and then emit using the offset 
+void attr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  { 
+		this -> init -> code(s, attr_offset_table, method_offset_table);   
 
 }    
 
@@ -1267,11 +1301,7 @@ void attr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, S
 	//attr_offset_table->enterscope();  
 	int new_offset = *(attr_offset_table->lookup(this -> name)); 
 	//load address then store word 
-//	char * offset = "";   
- //       sprintf(offset, "%d", new_offset); 
-  //       offset = strcat(offset, "($fp)"); 	
-//	emit_load_address(ACC, offset, s); 
-	emit_store(SELF, new_offset, ACC, s); 
+	emit_store(ACC, new_offset, SELF, s); 
 	attr_offset_table->exitscope();      
 	
 } 
@@ -1312,7 +1342,12 @@ void static_dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offs
      
 }
 void dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
-   for (int i = this -> actual -> first (); this ->actual -> more (i);
+  /* emit_store(ACC, 0, SP, s); 
+  emit_addiu(SP, SP, -4, s); 
+  emit_move(ACC, SELF, s);
+  label_num++;  
+  emit_bne(ACC, ZERO, label_num, s); */   
+  for (int i = this -> actual -> first (); this ->actual -> more (i);
        i = this ->actual -> next (i))
     {
                 actual->nth(i) -> code(s, attr_offset_table, method_offset_table);
@@ -1326,12 +1361,17 @@ void dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_tabl
          type = this -> get_type();
     }
 
+  emit_store(ACC, 0, SP, s); 
+  emit_addiu(SP, SP, -4, s); 
+  emit_move(ACC, SELF, s);
+  label_num++;  
+  emit_bne(ACC, ZERO, label_num, s);  
 
     this -> expr -> code(s, attr_offset_table, method_offset_table);
     //Method dispatch preparation here and then we define the appropriate label 
     //int offset = * (method_offset_table->lookup(type));
     CgenNodeP class_node = b_table->lookup(type);
-    int curr_offset = 2;
+    int curr_offset = 0;
      std::vector<method_class*> methods = class_node -> get_methods();
         for (std::size_t i = 0, max = methods.size(); i != max; ++i)
            {
@@ -1339,28 +1379,36 @@ void dispatch_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_tabl
                 curr_offset++;
            }
 
-    label_num++;
-    emit_label_ref(label_num, s);
+    
+    emit_label_def(label_num, s);
     emit_load(T1, 2, ACC, s);
     emit_load(T1, curr_offset, T1, s);
     emit_jalr(T1, s);    	
 } 
 
 void cond_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-
-
-
-
-
+	this ->pred -> code(s, attr_offset_table, method_offset_table); 
+	emit_load(T1, 3, ACC, s); //Load the value of e1 into the temp T1 
+	emit_load_bool(T2, BoolConst(1), s); 
+	label_num++; 
+	emit_beq(T1, T2, label_num, s); 
+	emit_label_def(label_num, s);
+	this -> else_exp -> code(s, attr_offset_table, method_offset_table); 
+	
+	emit_load_bool(T2, BoolConst(0), s); //If we didn't jump before 
+	emit_beq(T1, T2, label_num, s); 
+	emit_label_def(label_num, s);
+	this -> then_exp-> code(s, attr_offset_table, method_offset_table); 
 }
 
 void loop_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-
-
-
-
-
-
+	this -> pred -> code(s, attr_offset_table, method_offset_table); 
+	emit_load(T1, 3, ACC, s); 
+	emit_load_bool(T2, BoolConst(1), s); 
+	label_num++; 
+	emit_bne(T1, T2, label_num, s); 
+	emit_label_def(label_num, s);
+	this -> body -> code(s, attr_offset_table, method_offset_table); 
 }
 
 void typcase_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
@@ -1379,57 +1427,85 @@ void block_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, 
 }	 
 
 void let_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-	
+	//Follow the same pattern as the init where we check the type and emit appropriately based on the type 	
+  curr_attr_offset++;
+  attr_offset_table->enterscope(); 
+  if (attr_offset_table -> lookup(this -> identifier) == NULL) { 
+	attr_offset_table -> addid(this ->identifier, &curr_attr_offset); 
+  }  
+  if (this -> init -> type == no_expr_class().type) {
+                        if (this ->type_decl == Int) {
+                                emit_load_int(ACC, inttable.lookup_string("0"), s);
+                                emit_store(ACC, curr_attr_offset, SP, s);
+                        }
 
+                        if (this -> type_decl == Str) {
+                                emit_load_string(ACC, stringtable.lookup_string(""), s);
+                                emit_store(ACC, curr_attr_offset,SP, s);
+                        }
 
+                        if (this -> type_decl == Bool) {
+                                emit_load_bool(ACC, BoolConst(0), s);
+                                emit_store(ACC, curr_attr_offset,SP, s);
+                        }
 
-
-
-
+                } else { 
+                        this -> init  -> code(s, attr_offset_table, method_offset_table);
+                        emit_store(ACC, curr_attr_offset, SP, s);
+                }
+	//attr_offset_table->enterscope(); 
+	//attr_offset_table->addid(this -> type_decl, &curr_attr_offset); 
+	this -> body -> code(s, attr_offset_table, method_offset_table); 
+	//attr_offset_table->exitscope(); 
 }
 
 
 
 void plus_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-//Need to recursively check the two expressions, but both will evaluate to int per the semantic checker. Then call add on them, store the value in V1 and push the result to a new location on the stack 
-/* el -> code(s, attr_offset_table, classtable); 
-emit_push(ACC, s); 
-e2 -> code(s, attr_offset_table, classtable); 
-
-
-
-emit_push(ACC, s); 
-emit_jal("Object copy", s); */  
- 
+ 	this -> e1 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s);
+        this -> e2 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s); //fetches the value of e2 from where it was just calculated 
+        emit_jal("Object.copy", s);
+        emit_load(T1, 3, SP, s);
+        emit_addiu(SP,SP,4, s);
+        emit_load(T2, 3, SP, s);
+        emit_addiu(SP,SP,4,s);
+        emit_add(T1, T1, T2, s);
+        emit_load(ACC, 12, T1, s);
  	
 
 	
 }
 
 void sub_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-/*el -> code(s, attr_offset_table, classtable);  
-emit_push(ACC, s); 
-e2 -> code(s, attr_offset_table, classtable); 
 
-
-
-emit_push(ACC, s); 
-emit_jal("Object copy", s); */  	 
-
-
+	this -> e1 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s);
+        this -> e2 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s); //fetches the value of e2 from where it was just calculated 
+        emit_jal("Object.copy", s);
+        emit_load(T1, 3, SP, s);
+        emit_addiu(SP,SP,4, s);
+        emit_load(T2, 3, SP, s);
+        emit_addiu(SP,SP,4,s);
+        emit_sub(T1, T1, T2, s);
+        emit_load(ACC, 3, T1, s);
 
 }
 
 void mul_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-/* el -> code(s, attr_offset_table, classtable);  
-emit_push(ACC, s); 
-e2 -> code(s, attr_offset_table, classtable); 
-
-
-
-emit_push(ACC, s); 
-emit_jal("Object copy", s); */  
-
+	this -> e1 -> code(s, attr_offset_table, method_offset_table);  
+	emit_push(ACC, s); 
+	this -> e2 -> code(s, attr_offset_table, method_offset_table); 
+	emit_push(ACC, s); //fetches the value of e2 from where it was just calculated 
+	emit_jal("Object.copy", s);  
+	emit_load(T1, 3, SP, s); 
+	emit_addiu(SP,SP,4, s); 
+	emit_load(T2, 3, SP, s); 
+	emit_addiu(SP,SP,4,s); 
+	emit_mul(T1, T1, T2, s); 
+	emit_load(ACC, 3, T1, s); 
 
 
 
@@ -1437,38 +1513,65 @@ emit_jal("Object copy", s); */
 }
 
 void divide_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-/* el -> code(s, attr_offset_table, classtable);  
-emit_push(ACC, s); 
-e2 -> code(s, attr_offset_table, classtable); 
 
-
-
-emit_push(ACC, s); 
-emit_jal("Object copy", s); */  
-
-
-
-
-
+	this -> e1 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s);
+        this -> e2 -> code(s, attr_offset_table, method_offset_table);
+        emit_push(ACC, s); //fetches the value of e2 from where it was just calculated 
+        emit_jal("Object.copy", s);
+        emit_load(T1, 3, SP, s);
+        emit_addiu(SP,SP,4, s);
+        emit_load(T2, 3, SP, s);
+        emit_addiu(SP,SP,4,s);
+        emit_div(T1, T1, T2, s);
+        emit_load(ACC, 3, T1, s);
 }
 
 
-void neg_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table){
+void neg_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
+	this -> e1 -> code(s, attr_offset_table, method_offset_table); 
+	emit_load(ACC, 3, SELF, s); 
+	emit_jal("Object.copy", s); 
+	emit_load(T1, 3, ACC, s); 
+	emit_neg(T1, T1, s); 
+	emit_store(T1, 3, ACC, s); 	
 	
-
 }
+
+void comp_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) { 
+//Should already be taken care of by other cases? 
+} 
 
 void lt_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+	this -> e1-> code(s, attr_offset_table, method_offset_table); 
+	emit_load(T1, 3, ACC, s); 
+	this ->e2->code(s, attr_offset_table, method_offset_table); 
+	emit_load(T2, 3, ACC, s); 
+	label_num++;
+	emit_load_bool(ACC, BoolConst(1), s);  
+	emit_blt(T1, T2, label_num, s);
+	emit_load_bool(ACC, BoolConst(0), s); 
+	emit_label_def(label_num, s); 
+
 }
 
 void eq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
 }
 
 void leq_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+     	this -> e1-> code(s, attr_offset_table, method_offset_table);
+        emit_load(T1, 3, ACC, s);
+        this ->e2->code(s, attr_offset_table, method_offset_table);
+        emit_load(T2, 3, ACC, s);
+        label_num++;
+	emit_load_bool(ACC, BoolConst(1), s);
+        emit_bleq(T1, T2, label_num, s);
+	emit_load_bool(ACC, BoolConst(0), s);
+        emit_label_def(label_num, s);
 }
 
-void comp_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-}
+
+
 
 void int_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) 
 {
@@ -1489,9 +1592,26 @@ void bool_const_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_ta
 }
 
 void new__class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+	if (this -> type_name != SELF_TYPE) 
+	  { 
+		s<<LA;
+		s<<ACC<<" "; 
+		s<<this -> type_name<<PROTOBJ_SUFFIX<<endl;   
+		emit_jal("Object.copy", s); 	
+		s<<JAL;
+		 (emit_init_ref(this -> type_name, s));
+		s <<endl; 
+	  } 
+
 }
 
 void isvoid_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
+	this -> e1 -> code(s, attr_offset_table, method_offset_table); 
+        label_num++; 
+	emit_load_bool(T2, BoolConst(1), s); 
+	emit_bne(ACC, ZERO, label_num, s); 
+	emit_label_def(label_num, s);		
+
 }
 
 void no_expr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table)  {
@@ -1499,5 +1619,14 @@ void no_expr_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table
 }
 
 void object_class::code(ostream &s, SymbolTable<Symbol, int> *attr_offset_table, SymbolTable<Symbol, int> * method_offset_table) {
-	
-}    
+	if (this -> name == self) 
+	  { 
+		emit_move(ACC, SELF, s); 
+	  } 
+	else 
+	  { 
+		int curr_offset = *(attr_offset_table -> lookup(this -> name)); 
+		emit_load(ACC, curr_offset, SELF, s); 
+	  } 
+} 
+    
